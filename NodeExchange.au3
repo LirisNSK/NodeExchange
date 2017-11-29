@@ -270,6 +270,7 @@ Func DisconnectFromServerAgent()
 
 EndFunc
 
+; Выполняется поиск базы данных в кластере
 Func FindIBInCluster($pClsr)
 	
 	$lInfoBases = $g_IServerAgentConnection.GetInfoBases($pClsr)
@@ -569,8 +570,10 @@ Func CheckUpdate()
 	Local $TryCount
 	
 	; Подключение к базе данных
-	ConnectToDataBase()
-
+	If Not ConnectToDataBase() Then
+        Return False
+    EndIf
+    
 	; Проверяется необходимость обновления конфигурации до процедуры обмена
 	AddToLog("Проверка необходимости принять изменения")
 	$TryCount = 0 
@@ -602,6 +605,39 @@ Func CheckUpdate()
 
 	DisconnectFromDatabase()
 	DestroyCOMConnector()
+
+EndFunc
+
+Func RunExchange()
+
+    Local $ExchList
+
+    ; Попытка подключиться к ИБ. Не подключились, нечего дальше делать
+    If Not ConnectToDataBase() Then
+        Return False
+    EndIf
+
+    $ExchList	= $connDB.Catalogs.НастройкиОбменаДанными.Select()
+	$ThisNode	= $connDB.ExchangePlans.ОбменОРР.ThisNode()
+	AddToLog("Выполнение процедуры обмена. Этот узел: " & $ThisNode.Description & " (" & $ThisNode.Code & ")")
+	
+    while ($ExchList.Next())
+	
+		AddToLog("Вызов процедуры обмена для настройки " & $ExchList.Description)
+	;	$connDB.ПроцедурыОбменаДаннымиПолныеПрава.ВыполнитьОбменДаннымиПоНастройкеОбменаПодПолнымиПравамиНаСервере($ExchList.Ref);
+		
+	WEnd
+	
+	;$connDB.кпеЗаданияНаВыполнениеВУзлах.ВыполнитьЗаданияДляТекущегоУзла();
+	
+	If @error Then
+		AddToLog("При выполнении обмена произошла ошибка. Смотрите журнал регистрации")
+	Else
+		AddToLog("Обмен данными завершился без ошибок")
+	EndIf
+    
+    DisconnectFromDatabase()
+    DestroyCOMConnector()
 
 EndFunc
 
@@ -718,7 +754,8 @@ AddToLog("=> Старт обработки")
 If ( CanIContinue() ) Then
 	
 	CreatePIDFile()	
-	CheckUpdate()
+	;CheckUpdate()
+    RunExchange()
 	DeletePIDFile()	
 	AddToLog("<= Обработка завершена");
 	
