@@ -64,6 +64,7 @@ EndFunc
 ; Функции для работы с лог файлом
 ; *****************************************************************************
 
+; Возвращает дату/время в виде строки (для записи в лог)
 Func GetTimestampString()
 	Local $sDT
 	$sDT	= "[" & @MDAY & "." & @MON & "." & @YEAR & " " & @HOUR & ":" & @MIN & ":" & @SEC & "." & @MSEC & "] ";
@@ -77,6 +78,7 @@ Func GetCurrentDateString()
 	Return $sDT
 EndFunc
 
+; Добавляет переданную строку в журнал (log-файл)
 Func AddToLog($sMsg)
 	
 	PrepareLogFile()
@@ -89,6 +91,7 @@ Func AddToLog($sMsg)
 	
 EndFunc
 
+; Управляет файлом журнала
 Func PrepareLogFile()
 	$mCurrFolder	=	@ScriptDir
 	$mLogfilePath	=	$mCurrFolder & "\" & $sLogfileName
@@ -564,7 +567,21 @@ Func RunNonDynamicUpdate()
 	EndIf
 EndFunc
 
+; Функция возвращает Истина, если конфигурация была изменена
+Func IBChanged()
+
+	; Подключение к базе данных
+	If Not ConnectToDataBase() Then
+        Return False
+    EndIf
+    
+	; Проверяется необходимость обновления конфигурации
+	Return $connDB.ConfigurationChanged()
+
+EndFunc
+
 ; Функция проверяет необходимость применения изменений
+; Истина - удалось применить изменения (или не требовались), Ложь - при работе возникли ошибки
 Func CheckUpdate()
 	
 	Local $TryCount
@@ -578,7 +595,7 @@ Func CheckUpdate()
 	AddToLog("Проверка необходимости принять изменения")
 	$TryCount = 0 
 
-	While ($connDB.ConfigurationChanged() = True) AND $TryCount <= 3 
+	While (IBChanged() = True) AND $TryCount <= 3 
 		
 		$TryCount = $TryCount + 1
 
@@ -592,22 +609,26 @@ Func CheckUpdate()
 			DisconnectFromDatabase()
 			
 			If Not RunNonDynamicUpdate() Then
+				Return False
 				ExitLoop
 			EndIf
 		EndIf
 
 		if not ConnectToDataBase() Then
 			AddToLog("Выход из цикла из-за ошибки подключения к базе данных")
+			Return False
 			ExitLoop
 		EndIf
 
 	WEnd
 
 	DisconnectFromDatabase()
-	DestroyCOMConnector()
+
+	Return True
 
 EndFunc
 
+; Функция выполняет процедуру обмена данными на узле по ПлануОбмена ОбменОРР
 Func RunExchange()
 
     Local $ExchList
@@ -624,20 +645,65 @@ Func RunExchange()
     while ($ExchList.Next())
 	
 		AddToLog("Вызов процедуры обмена для настройки " & $ExchList.Description)
-	;	$connDB.ПроцедурыОбменаДаннымиПолныеПрава.ВыполнитьОбменДаннымиПоНастройкеОбменаПодПолнымиПравамиНаСервере($ExchList.Ref);
+		$connDB.ПроцедурыОбменаДаннымиПолныеПрава.ВыполнитьОбменДаннымиПоНастройкеОбменаПодПолнымиПравамиНаСервере($ExchList.Ref);
 		
 	WEnd
 	
-	;$connDB.кпеЗаданияНаВыполнениеВУзлах.ВыполнитьЗаданияДляТекущегоУзла();
-	
 	If @error Then
 		AddToLog("При выполнении обмена произошла ошибка. Смотрите журнал регистрации")
+		DisconnectFromDatabase()
+		Return False
 	Else
 		AddToLog("Обмен данными завершился без ошибок")
 	EndIf
-    
+
+	; Выполняет процедуру после завершения обмена
+	$connDB.кпеЗаданияНаВыполнениеВУзлах.ВыполнитьЗаданияДляТекущегоУзла();
+
     DisconnectFromDatabase()
-    DestroyCOMConnector()
+
+	Return True
+
+EndFunc
+
+Func ExchangeOnThisNode()
+	
+	Local $TryCount, $NeedAgain
+
+    ; Попытка подключиться к ИБ. Не подключились, нечего дальше делать
+    If Not ConnectToDataBase() Then
+        Return False
+    EndIf
+
+	$TryCount = 0 
+	$NeedAgain	= True
+
+	While ($NeedAgain = True) AND ($TryCount <= 3) 
+		
+		
+		$TryCount = $TryCount + 1
+		
+		If CheckUpdate() Then
+			; Проверка на изменения Конфигурации выполнены успешно
+			; Запуск обмена данными
+			RunExchange()
+			; Необходимость принятия изменений проверяется
+			If (IBChanged()) Then
+				; Нужно принять изменения, цикл повторить
+				$NeedAgain	= True
+			Else
+				; Принятие изменений не требуется, либо ошибка при работе с ИБ
+				$NeedAgain	= False
+			EndIf
+		Else
+			; Что-то пошло не так при проверке на обновление ИБ
+			$NeedAgain	= False
+			Return False
+		EndIf
+
+	WEnd
+	
+	Return	True
 
 EndFunc
 
@@ -659,7 +725,6 @@ Func CanIContinue()
 	EndIf
 	
 	Return $mResult
-	
 EndFunc
 
 ;
@@ -754,8 +819,7 @@ AddToLog("=> Старт обработки")
 If ( CanIContinue() ) Then
 	
 	CreatePIDFile()	
-	;CheckUpdate()
-    RunExchange()
+	ExchangeOnThisNode()
 	DeletePIDFile()	
 	AddToLog("<= Обработка завершена");
 	
