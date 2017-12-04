@@ -391,8 +391,6 @@ EndFunc
 Func ConnectToDataBase()
 	
 	Local $mv8exe
-
-	AddToLog("Попытка установить подключение с базой данных")
 	
 	If IsObj($connDB) = 1 Then
 		Return True
@@ -401,8 +399,8 @@ Func ConnectToDataBase()
 		If Not CreateCOMConnector() Then
 			Return False
 		EndIf
-
-		AddToLog("Подключение к ИБ")
+		
+		AddToLog("Попытка установить подключение с базой данных")
 		$connDB	=	$v8ComConnector.Connect($sIBConn)
 
 		If IsObj($connDB) = 0 Then
@@ -413,9 +411,9 @@ Func ConnectToDataBase()
 			; Выяснить путь к исполняемому файлу текущей версии Платформы
 			$mv8exe	= $connDB.BinDir() & "1cv8.exe"
 			AddToLog("Путь к v8exe: " & $mv8exe)
-
 			Return True
 		EndIf
+
 	EndIf
 
 EndFunc
@@ -703,6 +701,7 @@ Func ExchangeOnThisNode()
 
 	WEnd
 	
+	DestroyCOMConnector()
 	Return	True
 
 EndFunc
