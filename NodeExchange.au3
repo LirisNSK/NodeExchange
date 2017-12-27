@@ -410,7 +410,7 @@ Func ConnectToDataBase()
 			AddToLog("Подключение к ИБ установлено")
 			; Выяснить путь к исполняемому файлу текущей версии Платформы
 			$mv8exe	= $connDB.BinDir() & "1cv8.exe"
-			AddToLog("Путь к v8exe: " & $mv8exe)
+			;AddToLog("Путь к v8exe: " & $mv8exe)
 			Return True
 		EndIf
 
@@ -650,6 +650,7 @@ Func RunExchange()
 	If @error Then
 		AddToLog("При выполнении обмена произошла ошибка. Смотрите журнал регистрации")
 		DisconnectFromDatabase()
+		DestroyCOMConnector()
 		Return False
 	Else
 		AddToLog("Обмен данными завершился без ошибок")
@@ -659,6 +660,7 @@ Func RunExchange()
 	$connDB.кпеЗаданияНаВыполнениеВУзлах.ВыполнитьЗаданияДляТекущегоУзла();
 
     DisconnectFromDatabase()
+	DestroyCOMConnector()
 
 	Return True
 
@@ -702,6 +704,7 @@ Func ExchangeOnThisNode()
 	WEnd
 	
 	DestroyCOMConnector()
+	
 	Return	True
 
 EndFunc
